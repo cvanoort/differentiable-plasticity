@@ -253,12 +253,11 @@ def train(params):
     param_info = "_".join(
         [
             f'{key}_{value}'
-            if key not in {'nbsteps', 'rng_seed', 'save_every', 'test_every'}
-            else ''
             for key, value in sorted(params.items(), key=lambda x: x[0])
+            if key not in {'nb_steps', 'save_every', 'test_every'}
         ]
-    )[:-1]
-    suffix = f'maze_{param_info}_rng_seed_{params["rng_seed"]}'
+    )
+    suffix = f'maze_{param_info}'
 
     # Initialize random seeds (first two redundant?)
     print("Setting random seeds")
