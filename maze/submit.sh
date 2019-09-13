@@ -9,4 +9,4 @@
 # Join STDERR TO STDOUT.  (omit this if you want separate STDOUT AND STDERR)
 #PBS -j oe
 SEED=$(date +"%s")
-python maze.py --type plastic --rng_seed $SEED
+python ~/scratch/differentiable-plasticity/maze/maze.py --type plastic --rng_seed $SEED
