@@ -42,6 +42,8 @@ class Network(nn.Module):
         self.n_actions = params['n_actions']
         self.rule = params['rule']
         self.type = params['type']
+        self.device = params['device']
+
         self.softmax = torch.nn.functional.softmax
 
         if params['activ'] == 'tanh':
@@ -52,77 +54,81 @@ class Network(nn.Module):
             raise ValueError('Must choose an activ function')
 
         if params['type'] == 'lstm':
-            self.lstm = torch.nn.LSTM(self.input_size, params['hidden_size']).cuda()
+            self.lstm = torch.nn.LSTM(self.input_size, params['hidden_size']).to(self.device)
         elif params['type'] == 'rnn':
-            self.i2h = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
+            self.i2h = torch.nn.Linear(self.input_size, params['hidden_size']).to(self.device)
             self.w = torch.nn.Parameter(
-                (.01 * torch.rand(params['hidden_size'], params['hidden_size'])).cuda(),
-                requires_grad=True,
+                (0.01 * torch.rand(params['hidden_size'], params['hidden_size'])).requires_grad_(True).to(self.device)
             )
         elif params['type'] == 'homo':
-            self.i2h = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
+            self.i2h = torch.nn.Linear(self.input_size, params['hidden_size']).to(self.device)
             self.w = torch.nn.Parameter(
-                (.01 * torch.rand(params['hidden_size'], params['hidden_size'])).cuda(),
-                requires_grad=True,
+                (0.01 * torch.rand(params['hidden_size'], params['hidden_size'])).requires_grad_(True).to(self.device)
             )
             # Homogenous plasticity: everyone has the same alpha
             self.alpha = torch.nn.Parameter(
-                (.01 * torch.ones(1)).cuda(),
-                requires_grad=True,
+                (0.01 * torch.ones(1)).requires_grad_(True).to(self.device)
             )
             # Everyone has the same eta
-            self.eta = torch.nn.Parameter((.01 * torch.ones(1)).cuda(), requires_grad=True)
+            self.eta = torch.nn.Parameter(
+                (0.01 * torch.ones(1)).requires_grad_(True).to(self.device)
+            )
         elif params['type'] == 'plastic':
-            self.i2h = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
+            self.i2h = torch.nn.Linear(self.input_size, params['hidden_size']).to(self.device)
             self.w = torch.nn.Parameter(
-                (.01 * torch.rand(params['hidden_size'], params['hidden_size'])).cuda(),
-                requires_grad=True,
+                (0.01 * torch.rand(params['hidden_size'], params['hidden_size'])).to(self.device).requires_grad_(True)
             )
             self.alpha = torch.nn.Parameter(
-                (.01 * torch.rand(params['hidden_size'], params['hidden_size'])).cuda(),
-                requires_grad=True,
+                (0.01 * torch.rand(params['hidden_size'], params['hidden_size'])).to(self.device).requires_grad_(True)
             )
             # Everyone has the same eta
-            self.eta = torch.nn.Parameter((.01 * torch.ones(1)).cuda(), requires_grad=True)
+            self.eta = torch.nn.Parameter(
+                (0.01 * torch.ones(1)).to(self.device).requires_grad_(True)
+            )
         # LSTM with plastic connections. HIGHLY EXPERIMENTAL, NOT DEBUGGED
         elif params['type'] == 'lstmplastic':
-            self.h2f = torch.nn.Linear(params['hidden_size'], params['hidden_size']).cuda()
-            self.h2i = torch.nn.Linear(params['hidden_size'], params['hidden_size']).cuda()
-            self.h2opt = torch.nn.Linear(params['hidden_size'], params['hidden_size']).cuda()
+            self.h2f = torch.nn.Linear(params['hidden_size'], params['hidden_size']).to(self.device)
+            self.h2i = torch.nn.Linear(params['hidden_size'], params['hidden_size']).to(self.device)
+            self.h2opt = torch.nn.Linear(params['hidden_size'], params['hidden_size']).to(self.device)
 
             # Plasticity only in the recurrent connections, h to c.
             # This is replaced by the plastic connection matrices below
             # self.h2c = torch.nn.Linear(params['hidden_size'], params['hidden_size']).cuda()
-            self.w = torch.nn.Parameter((.01 * torch.rand(params['hidden_size'], params['hidden_size'])).cuda(),
-                                        requires_grad=True)
+            self.w = torch.nn.Parameter(
+                (0.01 * torch.rand(params['hidden_size'], params['hidden_size'])).requires_grad_(True).to(self.device)
+            )
             self.alpha = torch.nn.Parameter(
-                (.01 * torch.rand(params['hidden_size'], params['hidden_size'])).cuda(),
-                requires_grad=True,
+                (0.01 * torch.rand(params['hidden_size'], params['hidden_size'])).requires_grad_(True).to(self.device)
             )
             # Everyone has the same eta
-            self.eta = torch.nn.Parameter((.01 * torch.ones(1)).cuda(), requires_grad=True)
+            self.eta = torch.nn.Parameter(
+                (0.01 * torch.ones(1)).requires_grad_(True).to(self.device)
+            )
 
-            self.x2f = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
-            self.x2opt = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
-            self.x2i = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
-            self.x2c = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
+            self.x2f = torch.nn.Linear(self.input_size, params['hidden_size']).to(self.device)
+            self.x2opt = torch.nn.Linear(self.input_size, params['hidden_size']).to(self.device)
+            self.x2i = torch.nn.Linear(self.input_size, params['hidden_size']).to(self.device)
+            self.x2c = torch.nn.Linear(self.input_size, params['hidden_size']).to(self.device)
+
         # An LSTM implemented "by hand", to ensure maximum simlarity with the plastic LSTM
         elif params['type'] == 'lstmmanual':
-            self.h2f = torch.nn.Linear(params['hidden_size'], params['hidden_size']).cuda()
-            self.h2i = torch.nn.Linear(params['hidden_size'], params['hidden_size']).cuda()
-            self.h2opt = torch.nn.Linear(params['hidden_size'], params['hidden_size']).cuda()
-            self.h2c = torch.nn.Linear(params['hidden_size'], params['hidden_size']).cuda()
-            self.x2f = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
-            self.x2opt = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
-            self.x2i = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
-            self.x2c = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
+            self.h2f = torch.nn.Linear(params['hidden_size'], params['hidden_size']).to(self.device)
+            self.h2i = torch.nn.Linear(params['hidden_size'], params['hidden_size']).to(self.device)
+            self.h2opt = torch.nn.Linear(params['hidden_size'], params['hidden_size']).to(self.device)
+            self.h2c = torch.nn.Linear(params['hidden_size'], params['hidden_size']).to(self.device)
+            self.x2f = torch.nn.Linear(self.input_size, params['hidden_size']).to(self.device)
+            self.x2opt = torch.nn.Linear(self.input_size, params['hidden_size']).to(self.device)
+            self.x2i = torch.nn.Linear(self.input_size, params['hidden_size']).to(self.device)
+            self.x2c = torch.nn.Linear(self.input_size, params['hidden_size']).to(self.device)
+
         else:
             raise ValueError("Which network type?")
 
         # From hidden to action output
-        self.h2o = torch.nn.Linear(params['hidden_size'], self.n_actions).cuda()
+        self.h2o = torch.nn.Linear(params['hidden_size'], self.n_actions).to(self.device)
         # From hidden to value prediction (for A2C)
-        self.h2v = torch.nn.Linear(params['hidden_size'], 1).cuda()
+        self.h2v = torch.nn.Linear(params['hidden_size'], 1).to(self.device)
+
         self.params = params
 
         # Note: Vectors are row vectors, and matrices are transposed wrt the usual order, following pytorch conventions
@@ -149,7 +155,7 @@ class Network(nn.Module):
             # pdb.set_trace()
             hidden = (h_activ, cell)
             if np.isnan(np.sum(h_activ.data.cpu().numpy())) or np.isnan(np.sum(hidden[1].data.cpu().numpy())):
-                raise ValueError("Nan detected !")
+                raise ValueError("Nan detected!")
 
         elif self.type == 'lstm_plastic':
             fgt = torch.sigmoid(self.x2f(input) + self.h2f(hidden[0]))
@@ -216,23 +222,24 @@ class Network(nn.Module):
         return activout, valueout, hidden, hebb
 
     def initialZeroHebb(self):
-        return torch.zeros(self.params['hidden_size'], self.params['hidden_size'], requires_grad=False).cuda()
+        return torch.zeros(self.params['hidden_size'], self.params['hidden_size']).to(self.device)
 
     def initialZeroState(self):
         if self.params['type'] == 'lstm':
             return (
-                torch.zeros(1, 1, self.params['hidden_size'], requires_grad=False).cuda(),
-                torch.zeros(1, 1, self.params['hidden_size'], requires_grad=False).cuda(),
+                torch.zeros(1, 1, self.params['hidden_size']).to(self.device),
+                torch.zeros(1, 1, self.params['hidden_size']).to(self.device),
             )
         elif self.params['type'] == 'lstmmanual' or self.params['type'] == 'lstmplastic':
             return (
-                torch.zeros(1, self.params['hidden_size'], requires_grad=False).cuda(),
-                torch.zeros(1, self.params['hidden_size'], requires_grad=False).cuda(),
+                torch.zeros(1, self.params['hidden_size']).to(self.device),
+                torch.zeros(1, self.params['hidden_size']).to(self.device),
             )
         elif self.params['type'] == 'rnn' or self.params['type'] == 'plastic' or self.params['type'] == 'homo':
-            return torch.zeros(1, self.params['hidden_size'], requires_grad=False).cuda()
+            return torch.zeros(1, self.params['hidden_size']).to(self.device)
         else:
             raise ValueError("Which type?")
+
 
 
 def train(params):
@@ -248,11 +255,6 @@ def train(params):
     # Receptive field size
     view_width = 3
     params['input_size'] = view_width * view_width + additional_inputs + params['n_actions']
-
-    if params['device'] == 'cpu':
-        params['t_type'] = torch.FloatTensor
-    else:
-        params['t_type'] = torch.cuda.FloatTensor
 
     print("Starting training...")
     print(f"Passed params:\n{pprint.pformat(params)}")
@@ -348,7 +350,7 @@ def train(params):
                                             posc - view_width // 2:posc + view_width // 2 + 1,
                                             ].flatten()
 
-            inputs = torch.from_numpy(inputs_np).cuda().requires_grad_(False)
+            inputs = torch.from_numpy(inputs_np).to(params['device'])
             # Previous chosen action
             # inputs[0][num_action_chosen] = 1
             inputs[0][-1] = 1  # Bias neuron
@@ -611,7 +613,7 @@ if __name__ == "__main__":
         "--device",
         help="Computing device to be used for backpropagation calculations.",
         default='cpu',
-        choices=['cpu', 'gpu'],
+        choices=['cpu', 'cuda'],
     )
     parser.add_argument(
         "--print_every",
