@@ -15,7 +15,7 @@
 #    limitations under the License.
 
 
-# (Note: this contains an EXTREMELY EXPERIMENTAL implementation of an LSTM with plastic connections)
+# Note: this contains an EXTREMELY EXPERIMENTAL implementation of an LSTM with plastic connections
 
 import argparse
 import pickle
@@ -23,6 +23,7 @@ import platform
 import pprint
 import random
 import time
+import json
 
 import numpy as np
 import torch
@@ -33,23 +34,12 @@ from numpy import random
 np.set_printoptions(precision=4)
 
 
-# 1 input for the previous reward, 1 input for numstep, 1 for whether currently on reward square, 1 "Bias" input
-ADDINPUT = 4
-# U, D, L, R
-NBACTIONS = 4
-# Receptive field size
-RFSIZE = 3
-TOTALNBINPUTS = RFSIZE * RFSIZE + ADDINPUT + NBACTIONS
-
-
-# ttype = torch.FloatTensor    # For CPU
-ttype = torch.cuda.FloatTensor  # Gor GPU
-
-
 class Network(nn.Module):
     def __init__(self, params):
         super().__init__()
 
+        self.input_size = params['input_size']
+        self.n_actions = params['n_actions']
         self.rule = params['rule']
         self.type = params['type']
         self.softmax = torch.nn.functional.softmax
@@ -62,15 +52,15 @@ class Network(nn.Module):
             raise ValueError('Must choose an activ function')
 
         if params['type'] == 'lstm':
-            self.lstm = torch.nn.LSTM(TOTALNBINPUTS, params['hidden_size']).cuda()
+            self.lstm = torch.nn.LSTM(self.input_size, params['hidden_size']).cuda()
         elif params['type'] == 'rnn':
-            self.i2h = torch.nn.Linear(TOTALNBINPUTS, params['hidden_size']).cuda()
+            self.i2h = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
             self.w = torch.nn.Parameter(
                 (.01 * torch.rand(params['hidden_size'], params['hidden_size'])).cuda(),
                 requires_grad=True,
             )
         elif params['type'] == 'homo':
-            self.i2h = torch.nn.Linear(TOTALNBINPUTS, params['hidden_size']).cuda()
+            self.i2h = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
             self.w = torch.nn.Parameter(
                 (.01 * torch.rand(params['hidden_size'], params['hidden_size'])).cuda(),
                 requires_grad=True,
@@ -83,7 +73,7 @@ class Network(nn.Module):
             # Everyone has the same eta
             self.eta = torch.nn.Parameter((.01 * torch.ones(1)).cuda(), requires_grad=True)
         elif params['type'] == 'plastic':
-            self.i2h = torch.nn.Linear(TOTALNBINPUTS, params['hidden_size']).cuda()
+            self.i2h = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
             self.w = torch.nn.Parameter(
                 (.01 * torch.rand(params['hidden_size'], params['hidden_size'])).cuda(),
                 requires_grad=True,
@@ -112,25 +102,25 @@ class Network(nn.Module):
             # Everyone has the same eta
             self.eta = torch.nn.Parameter((.01 * torch.ones(1)).cuda(), requires_grad=True)
 
-            self.x2f = torch.nn.Linear(TOTALNBINPUTS, params['hidden_size']).cuda()
-            self.x2opt = torch.nn.Linear(TOTALNBINPUTS, params['hidden_size']).cuda()
-            self.x2i = torch.nn.Linear(TOTALNBINPUTS, params['hidden_size']).cuda()
-            self.x2c = torch.nn.Linear(TOTALNBINPUTS, params['hidden_size']).cuda()
+            self.x2f = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
+            self.x2opt = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
+            self.x2i = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
+            self.x2c = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
         # An LSTM implemented "by hand", to ensure maximum simlarity with the plastic LSTM
         elif params['type'] == 'lstmmanual':
             self.h2f = torch.nn.Linear(params['hidden_size'], params['hidden_size']).cuda()
             self.h2i = torch.nn.Linear(params['hidden_size'], params['hidden_size']).cuda()
             self.h2opt = torch.nn.Linear(params['hidden_size'], params['hidden_size']).cuda()
             self.h2c = torch.nn.Linear(params['hidden_size'], params['hidden_size']).cuda()
-            self.x2f = torch.nn.Linear(TOTALNBINPUTS, params['hidden_size']).cuda()
-            self.x2opt = torch.nn.Linear(TOTALNBINPUTS, params['hidden_size']).cuda()
-            self.x2i = torch.nn.Linear(TOTALNBINPUTS, params['hidden_size']).cuda()
-            self.x2c = torch.nn.Linear(TOTALNBINPUTS, params['hidden_size']).cuda()
+            self.x2f = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
+            self.x2opt = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
+            self.x2i = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
+            self.x2c = torch.nn.Linear(self.input_size, params['hidden_size']).cuda()
         else:
             raise ValueError("Which network type?")
 
         # From hidden to action output
-        self.h2o = torch.nn.Linear(params['hidden_size'], NBACTIONS).cuda()
+        self.h2o = torch.nn.Linear(params['hidden_size'], self.n_actions).cuda()
         # From hidden to value prediction (for A2C)
         self.h2v = torch.nn.Linear(params['hidden_size'], 1).cuda()
         self.params = params
@@ -246,18 +236,27 @@ class Network(nn.Module):
 
 
 def train(params):
+    suffix = f'maze_{time.ctime()}'.replace(' ', '_')
+
+    with open(f'cli_args_{suffix}.json', 'w') as f:
+        json.dump(params, f)
+
+    # 1 input for the previous reward, 1 input for numstep, 1 for whether currently on reward square, 1 "Bias" input
+    additional_inputs = 4
+    # U, D, L, R
+    params['n_actions'] = 4
+    # Receptive field size
+    view_width = 3
+    params['input_size'] = view_width * view_width + additional_inputs + params['n_actions']
+
+    if params['device'] == 'cpu':
+        params['t_type'] = torch.FloatTensor
+    else:
+        params['t_type'] = torch.cuda.FloatTensor
+
     print("Starting training...")
     print(f"Passed params:\n{pprint.pformat(params)}")
     print(pprint.pformat(dict(platform.uname()._asdict().items())))
-    # Turning the parameters into a nice suffix for filenames
-    param_info = "_".join(
-        [
-            f'{key}_{value}'
-            for key, value in sorted(params.items(), key=lambda x: x[0])
-            if key not in {'nb_steps', 'save_every', 'test_every'}
-        ]
-    )
-    suffix = f'maze_{param_info}'
 
     # Initialize random seeds (first two redundant?)
     print("Setting random seeds")
@@ -280,24 +279,22 @@ def train(params):
     lab = np.ones((lab_size, lab_size))
     CTR = lab_size // 2
 
-    # Simple cross maze
-    # lab[CTR, 1:lab_size-1] = 0
-    # lab[1:lab_size-1, CTR] = 0
-
-    # Double-T maze
-    # lab[CTR, 1:lab_size-1] = 0
-    # lab[1:lab_size-1, 1] = 0
-    # lab[1:lab_size-1, lab_size - 2] = 0
-
-    # Grid maze
-    lab[1:lab_size - 1, 1:lab_size - 1].fill(0)
-    for row in range(1, lab_size - 1):
-        for col in range(1, lab_size - 1):
-            if row % 2 == 0 and col % 2 == 0:
-                lab[row, col] = 1
-    # Not really necessary, but nicer to not start on a wall
-    # May help localization by introducing a detectable irregularity in the center?
-    lab[CTR, CTR] = 0
+    if params['maze_type'] == 'cross':
+        lab[CTR, 1:lab_size-1] = 0
+        lab[1:lab_size-1, CTR] = 0
+    elif params['maze_type'] == 'double_t':
+        lab[CTR, 1:lab_size-1] = 0
+        lab[1:lab_size-1, 1] = 0
+        lab[1:lab_size-1, lab_size - 2] = 0
+    elif params['maze_type'] == 'grid':
+        lab[1:lab_size - 1, 1:lab_size - 1].fill(0)
+        for row in range(1, lab_size - 1):
+            for col in range(1, lab_size - 1):
+                if row % 2 == 0 and col % 2 == 0:
+                    lab[row, col] = 1
+        # Not really necessary, but nicer to not start on a wall
+        # May help localization by introducing a detectable irregularity in the center?
+        lab[CTR, CTR] = 0
 
     all_losses_objective = []
     all_losses_eval = []
@@ -308,9 +305,9 @@ def train(params):
 
     print("Starting episodes...", flush=True)
     for episode in range(params['nb_iter']):
-        PRINTTRACE = 0
+        do_print = 0
         if (episode + 1) % (1 + params['print_every']) == 0:
-            PRINTTRACE = 1
+            do_print = 1
 
         # Note: it doesn't matter if the reward is on the center (reward is only computed after an action is taken).
         # All we need is not to put it on a wall or pillar (lab=1)
@@ -345,10 +342,10 @@ def train(params):
         dist = 0
 
         for numstep in range(params['ep_len']):
-            inputs_np = np.zeros((1, TOTALNBINPUTS), dtype='float32')
-            inputs_np[0, 0:RFSIZE * RFSIZE] = lab[
-                                            posr - RFSIZE // 2:posr + RFSIZE // 2 + 1,
-                                            posc - RFSIZE // 2:posc + RFSIZE // 2 + 1,
+            inputs_np = np.zeros((1, params['input_size']), dtype='float32')
+            inputs_np[0, 0:view_width * view_width] = lab[
+                                            posr - view_width // 2:posr + view_width // 2 + 1,
+                                            posc - view_width // 2:posc + view_width // 2 + 1,
                                             ].flatten()
 
             inputs = torch.from_numpy(inputs_np).cuda().requires_grad_(False)
@@ -415,7 +412,7 @@ def train(params):
             # (discourages concentration). It really does help!
             loss += params['bentropy'] * y.pow(2).sum()
 
-            # if PRINTTRACE:
+            # if do_print:
             #    print(
             #        "Probabilities:", y.data.cpu().numpy(),
             #        "Picked action:", num_action_chosen,
@@ -432,7 +429,7 @@ def train(params):
 
         all_rewards.append(sum_reward)
 
-        if PRINTTRACE:
+        if do_print:
             print(f"\tlossv:                         {lossv.data.cpu().numpy()[0]:0.4f}")
             print(f"\tTotal reward for this episode: {sum_reward:0.1f}")
             print(f"\tTravelled Distance:            {dist}")
@@ -611,10 +608,22 @@ if __name__ == "__main__":
         default=200,
     )
     parser.add_argument(
+        "--device",
+        help="Computing device to be used for backpropagation calculations.",
+        default='cpu',
+        choices=['cpu', 'gpu'],
+    )
+    parser.add_argument(
         "--print_every",
         type=int,
         help="Number of cycles between successive printing of information.",
         default=100,
+    )
+    parser.add_argument(
+        "--maze_type",
+        help="Number of cycles between successive printing of information.",
+        default='grid',
+        choices=['grid', 'double_t', 'cross']
     )
 
     args = parser.parse_args()

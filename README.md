@@ -16,4 +16,7 @@ The code requires Python 3 and PyTorch 0.3.0 or later. The `images` code also re
 
 To comment, please open an issue. We will not be accepting pull requests but encourage further study of this research. To learn more, check out our accompanying article on the [Uber Engineering Blog](https://eng.uber.com/differentiable-plasticity).
 
-
+To extract smoothed rewards from log file use:
+```bash
+grep maze.log -e "Mean 100 Ep" | awk -F ' ' '{print $5}'
+```
