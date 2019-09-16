@@ -636,9 +636,9 @@ if __name__ == "__main__":
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
 
-    Path(f'output/').mkdir(parents=True, exist_ok=True)
+    Path(f'output').mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
-        filename=f'../output/maze_{args.rng_seed}.log',
+        filename=f'output/maze_{args.rng_seed}.log',
         level=logging.INFO,
         format='%(message)s',
     )
