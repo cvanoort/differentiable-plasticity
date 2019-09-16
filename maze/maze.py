@@ -492,7 +492,7 @@ def train(params):
                 for item in all_losses_eval:
                     print(item, file=f)
 
-            torch.save(net.state_dict(), f'torchmodel_{suffix}.dat')
+            torch.save(net.state_dict(), f'output/torchmodel_{suffix}.dat')
 
 
 if __name__ == "__main__":
