@@ -487,10 +487,10 @@ def train(params):
                 pickle.dump(params, f)
             with open(f'output/lossv_{suffix}.txt', 'w') as f:
                 for item in all_losses_v:
-                    logging.info(item, file=f)
+                    print(item, file=f)
             with open(f'output/loss_{suffix}.txt', 'w') as f:
                 for item in all_losses_eval:
-                    logging.info(item, file=f)
+                    print(item, file=f)
 
             torch.save(net.state_dict(), f'torchmodel_{suffix}.dat')
 
