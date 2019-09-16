@@ -306,7 +306,7 @@ def train(params):
     loss_between_saves = 0
     now_time = time.time()
 
-    logging.info("Starting episodes...", flush=True)
+    logging.info("Starting episodes...")
     for episode in range(params['nb_iter']):
         do_print = 0
         if (episode + 1) % (1 + params['print_every']) == 0:
