@@ -18,18 +18,19 @@
 # Note: this contains an EXTREMELY EXPERIMENTAL implementation of an LSTM with plastic connections
 
 import argparse
+import json
+import logging
 import pickle
 import platform
 import pprint
 import random
 import time
-import json
+from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn as nn
 from numpy import random
-
 
 np.set_printoptions(precision=4)
 
@@ -256,24 +257,24 @@ def train(params):
     view_width = 3
     params['input_size'] = view_width * view_width + additional_inputs + params['n_actions']
 
-    print("Starting training...")
-    print(f"Passed params:\n{pprint.pformat(params)}")
-    print(pprint.pformat(dict(platform.uname()._asdict().items())))
+    logging.info("Starting training...")
+    logging.info(f"Passed params:\n{pprint.pformat(params)}")
+    logging.info(pprint.pformat(dict(platform.uname()._asdict().items())))
 
     # Initialize random seeds (first two redundant?)
-    print("Setting random seeds")
+    logging.info("Setting random seeds")
     np.random.seed(params['rng_seed'])
     random.seed(params['rng_seed'])
     torch.manual_seed(params['rng_seed'])
 
-    print("Initializing network")
+    logging.info("Initializing network")
     net = Network(params)
-    print(f"Shape of all optimized parameters:\n{pprint.pformat([x.size() for x in net.parameters()])}")
+    logging.info(f"Shape of all optimized parameters:\n{pprint.pformat([x.size() for x in net.parameters()])}")
     allsizes = [torch.numel(x.data.cpu()) for x in net.parameters()]
-    print(f"Size (numel) of all optimized elements: {allsizes}")
-    print(f"Total size (numel) of all optimized elements: {sum(allsizes)}")
+    logging.info(f"Size (numel) of all optimized elements: {allsizes}")
+    logging.info(f"Total size (numel) of all optimized elements: {sum(allsizes)}")
 
-    print("Initializing optimizer")
+    logging.info("Initializing optimizer")
     optimizer = torch.optim.Adam(net.parameters(), lr=1.0 * params['lr'], eps=1e-4)
     # scheduler = torch.optim.lr_scheduler.step_lr(optimizer, gamma=params['gamma'], step_size=params['step_lr'])
 
@@ -305,7 +306,7 @@ def train(params):
     loss_between_saves = 0
     now_time = time.time()
 
-    print("Starting episodes...", flush=True)
+    logging.info("Starting episodes...", flush=True)
     for episode in range(params['nb_iter']):
         do_print = 0
         if (episode + 1) % (1 + params['print_every']) == 0:
@@ -324,7 +325,7 @@ def train(params):
             while lab[rposr, rposc] or (rposr != 1 and rposr != lab_size - 2 and rposc != 1 and rposc != lab_size - 2):
                 rposr = np.random.randint(1, lab_size - 1)
                 rposc = np.random.randint(1, lab_size - 1)
-        # print("Reward pos:", rposr, rposc)
+        # logging.info("Reward pos:", rposr, rposc)
 
         # Agent always starts an episode from the center
         posc = CTR
@@ -415,7 +416,7 @@ def train(params):
             loss += params['bentropy'] * y.pow(2).sum()
 
             # if do_print:
-            #    print(
+            #    logging.info(
             #        "Probabilities:", y.data.cpu().numpy(),
             #        "Picked action:", num_action_chosen,
             #        ", got reward", reward,
@@ -432,10 +433,10 @@ def train(params):
         all_rewards.append(sum_reward)
 
         if do_print:
-            print(f"\tlossv:                         {lossv.data.cpu().numpy()[0]:0.4f}")
-            print(f"\tTotal reward for this episode: {sum_reward:0.1f}")
-            print(f"\tTravelled Distance:            {dist}")
-            print(f"\tMean 100 Ep. Reward:           {np.mean(all_rewards[-100:]):0.4f}")
+            logging.info(f"\tlossv:                         {lossv.data.cpu().numpy()[0]:0.4f}")
+            logging.info(f"\tTotal reward for this episode: {sum_reward:0.1f}")
+            logging.info(f"\tTravelled Distance:            {dist}")
+            logging.info(f"\tMean 100 Ep. Reward:           {np.mean(all_rewards[-100:]):0.4f}")
 
         # Do we want to squash rewards for stabilization? 
         if params['squash'] == 1:
@@ -464,32 +465,32 @@ def train(params):
             all_losses_eval.append(sum_reward)
             all_losses_v.append(float(lossv))
 
-        # Algorithm done. Now print statistics and save files.
+        # Algorithm done. Now logging.info statistics and save files.
         if (episode + 1) % params['print_every'] == 0:
-            print(f"Episode {episode + 1} {'=' * 30}")
-            print(f"\tMean loss:                     {loss_between_saves / params['print_every']:0.4f}")
+            logging.info(f"Episode {episode + 1} {'=' * 30}")
+            logging.info(f"\tMean loss:                     {loss_between_saves / params['print_every']:0.4f}")
             loss_between_saves = 0
             previous_time = now_time
             now_time = time.time()
-            print(f"\tTime spent on last {params['print_every']} iters:  {now_time - previous_time:0.4f}")
+            logging.info(f"\tTime spent on last {params['print_every']} iters:  {now_time - previous_time:0.4f}")
             if params['type'] in {'plastic', 'lstm_plastic'}:
-                print(f"\tEta:                           {net.eta.data.cpu().numpy()[0]:0.4f}")
-                print(f"\talpha[0,1]:                    {net.alpha.data.cpu().numpy()[0, 1]:0.4f}")
-                print(f"\tw[0,1]:                        {net.w.data.cpu().numpy()[0, 1]:0.4f}")
+                logging.info(f"\tEta:                           {net.eta.data.cpu().numpy()[0]:0.4f}")
+                logging.info(f"\talpha[0,1]:                    {net.alpha.data.cpu().numpy()[0, 1]:0.4f}")
+                logging.info(f"\tw[0,1]:                        {net.w.data.cpu().numpy()[0, 1]:0.4f}")
             elif params['type'] == 'rnn':
-                print(f"\tw[0,1]:                        {net.w.data.cpu().numpy()[0, 1]:0.4f}")
+                logging.info(f"\tw[0,1]:                        {net.w.data.cpu().numpy()[0, 1]:0.4f}")
 
         if (episode + 1) % params['save_every'] == 0:
-            print(f"\tLoss (100 ep rolling mean):    {np.mean(all_losses_objective[-100:]):0.4f}")
-            print("\tSaving local files...")
+            logging.info(f"\tLoss (100 ep rolling mean):    {np.mean(all_losses_objective[-100:]):0.4f}")
+            logging.info("\tSaving local files...")
             with open(f'params_{suffix}.dat', 'wb') as f:
                 pickle.dump(params, f)
             with open(f'lossv_{suffix}.txt', 'w') as f:
                 for item in all_losses_v:
-                    print(item, file=f)
+                    logging.info(item, file=f)
             with open(f'loss_{suffix}.txt', 'w') as f:
                 for item in all_losses_eval:
-                    print(item, file=f)
+                    logging.info(item, file=f)
 
             torch.save(net.state_dict(), f'torchmodel_{suffix}.dat')
 
@@ -629,4 +630,17 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+
+    # Sometimes the logging module will not create a log file if the existing
+    # handlers are not cleared before calling basicConfig
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+
+    Path(f'output/').mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        filename=f'../output/maze_{args.rng_seed}.log',
+        level=logging.INFO,
+        format='%(message)s',
+    )
+
     train(vars(args))
