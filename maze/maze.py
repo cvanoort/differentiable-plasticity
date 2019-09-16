@@ -246,7 +246,7 @@ class Network(nn.Module):
 def train(params):
     suffix = f'maze_{time.ctime()}'.replace(' ', '_')
 
-    with open(f'cli_args_{suffix}.json', 'w') as f:
+    with open(f'output/cli_args_{suffix}.json', 'w') as f:
         json.dump(params, f)
 
     # 1 input for the previous reward, 1 input for numstep, 1 for whether currently on reward square, 1 "Bias" input
@@ -483,12 +483,12 @@ def train(params):
         if (episode + 1) % params['save_every'] == 0:
             logging.info(f"\tLoss (100 ep rolling mean):    {np.mean(all_losses_objective[-100:]):0.4f}")
             logging.info("\tSaving local files...")
-            with open(f'params_{suffix}.dat', 'wb') as f:
+            with open(f'output/params_{suffix}.dat', 'wb') as f:
                 pickle.dump(params, f)
-            with open(f'lossv_{suffix}.txt', 'w') as f:
+            with open(f'output/lossv_{suffix}.txt', 'w') as f:
                 for item in all_losses_v:
                     logging.info(item, file=f)
-            with open(f'loss_{suffix}.txt', 'w') as f:
+            with open(f'output/loss_{suffix}.txt', 'w') as f:
                 for item in all_losses_eval:
                     logging.info(item, file=f)
 
